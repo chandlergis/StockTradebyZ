@@ -121,7 +121,11 @@ python select_stock.py \
   --config ./configs.json  # Selector 配置
   --date 2025-07-02        # 交易日（缺省 = 最新）
 ```
+### 运行形态选股
 
+```bash
+python select_stock_dtw.py --template-stock 300620 --start-date 20250601 --end-date 20250718 --price-weight 0.7 --dtw-radius 5 --decay-k 0.05 --top-n 20
+```
 示例输出：
 
 ```
