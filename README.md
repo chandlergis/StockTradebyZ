@@ -124,7 +124,33 @@ python select_stock.py \
 ### 运行形态选股
 
 ```bash
-python select_stock_dtw.py --template-stock 300620 --start-date 20250601 --end-date 20250718 --price-weight 0.7 --dtw-radius 5 --decay-k 0.05 --top-n 20
+python select_stock_dtw.py --template-stock 001311 --start-date 20250801 --end-date 20250903 --price-weight 0.7 --dtw-radius 5 --decay-k 0.05 --top-n 20
+```
+```bash
+python select_stock_dtw.py --template-stock 002100 --start-date 20250901 --end-date 20251009 --price-weight 0.7 --dtw-radius 5 --decay-k 0.05 --top-n 20
+```
+```bash
+python select_stock_dtw.py --template-stock 300930 --start-date 20250901 --end-date 20251022 --price-weight 0.7 --dtw-radius 5 --decay-k 0.05 --top-n 20
+```
+```bash
+python select_stock_dtw.py --template-stock 603979 --start-date 20250810 --end-date 20250923 --price-weight 0.7 --dtw-radius 5 --decay-k 0.05 --top-n 20
+```
+```bash
+python select_stock_dtw.py --template-stock 601156 --start-date 20251210 --end-date 20260112 --price-weight 0.7 --dtw-radius 5 --decay-k 0.05 --top-n 20
+```
+```bash
+python3 fetch_kline.py   --datasource mootdx   --frequency 4   --exclude-gem true   --min-mktcap 5e9   --max-mktcap +inf   --start 20250901   --end today   --out ./data   --workers 20
+```
+
+```bash
+python select_stock.py   --data-dir ./data --config ./configs.json --date 2025-08-20
+```
+```bash
+python3 fetch_kline.py   --datasource mootdx   --frequency 4   --exclude-gem true   --min-mktcap 5e9   --max-mktcap +inf   --start 20250101   --end today   --out ./data   --workers 10
+```
+
+```bash
+python3 fetch_kline.py   --datasource efinance   --frequency 4   --exclude-gem true   --min-mktcap 5e9   --max-mktcap +inf   --start 20251201   --end today   --out ./data   --workers 20
 ```
 示例输出：
 

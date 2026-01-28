@@ -143,6 +143,24 @@ def _find_peaks(
     return peaks_df
 
 
+def compute_rsi(df: pd.DataFrame, n: int = 6) -> pd.Series:
+    """
+    计算 RSI 指标 (Relative Strength Index)
+    使用 Wilder's Smoothing (pandas ewm with com=n-1)
+    """
+    diff = df["close"].diff()
+    up = diff.clip(lower=0)
+    down = -1 * diff.clip(upper=0)
+
+    # Use exponential moving average
+    ma_up = up.ewm(com=n - 1, adjust=False).mean()
+    ma_down = down.ewm(com=n - 1, adjust=False).mean()
+
+    rs = ma_up / (ma_down + 1e-9)
+    rsi = 100 - (100 / (1 + rs))
+    return rsi
+
+
 # --------------------------- Selector 类 --------------------------- #
 class BBIKDJSelector:
     """
@@ -628,6 +646,170 @@ class BreakoutVolumeKDJSelector:
             hist = df[df["date"] <= date]
             if hist.empty:
                 continue
+            if self._passes_filters(hist):
+                picks.append(code)
+        return picks
+
+
+class KDJDivergenceSelector:
+    """
+    KDJ 底背离选股 (KDJ Bullish Divergence)
+    逻辑：股价创近日新低，但 J 值未创新低（反而抬高）。
+    这是比单纯 J 值低更强的见底信号。
+    """
+    def __init__(
+        self,
+        lookback: int = 20,
+        j_max_limit: float = 20.0,
+        compare_interval: int = 5,
+        prev_j_limit: float = 10.0,  # 前低 J 值必须足够低（极度超卖）
+        min_j_diff: float = 5.0,     # J 值抬升幅度必须足够大
+    ) -> None:
+        self.lookback = lookback
+        self.j_max_limit = j_max_limit
+        self.compare_interval = compare_interval
+        self.prev_j_limit = prev_j_limit
+        self.min_j_diff = min_j_diff
+
+    def _passes_filters(self, hist: pd.DataFrame) -> bool:
+        if len(hist) < self.lookback + 5:
+            return False
+
+        # 1. 计算指标
+        hist = hist.copy()
+        hist = compute_kdj(hist)
+        
+        # 关注最近 lookback 天
+        subset = hist.tail(self.lookback)
+        if subset.empty:
+            return False
+
+        # 2. 获取今日（或最新）数据
+        curr_idx = subset.index[-1]
+        curr_close = subset.loc[curr_idx, "close"]
+        curr_j = subset.loc[curr_idx, "J"]
+
+        # 过滤：如果当前 J 值本身太高，即便背离意义也不大（不是底部）
+        if curr_j > self.j_max_limit:
+            return False
+
+        # 3. 寻找之前的低点 (T_prev)
+        # 我们在 [T-lookback, T-compare_interval] 区间内找最低收盘价
+        search_range = subset.iloc[:-self.compare_interval]
+        if search_range.empty:
+            return False
+            
+        # 找到前低（收盘价最低点）
+        prev_min_idx = search_range["close"].idxmin()
+        prev_close = search_range.loc[prev_min_idx, "close"]
+        prev_j = search_range.loc[prev_min_idx, "J"]
+
+        # 4. 判断底背离 - 严格模式
+        # 条件A: 股价创新低 或 持平
+        if curr_close > prev_close:
+            return False
+            
+        # 条件B: 前低 J 值必须在深水区 (极度恐慌)
+        if prev_j > self.prev_j_limit:
+            return False
+            
+        # 条件C: J 值显著抬升 (背离力度大)
+        if curr_j - prev_j < self.min_j_diff:
+            return False
+
+        return True
+
+    def select(
+        self, date: pd.Timestamp, data: Dict[str, pd.DataFrame]
+    ) -> List[str]:
+        picks: List[str] = []
+        min_len = self.lookback + 10
+        for code, df in data.items():
+            hist = df[df["date"] <= date]
+            if hist.empty:
+                continue
+            hist = hist.tail(min_len)
+            if self._passes_filters(hist):
+                picks.append(code)
+        return picks
+
+
+class BBIPullbackSelector:
+    """
+    BBI 趋势回踩选股 (BBI Trend Pullback)
+    逻辑：
+    1. 长期趋势向上 (BBI 依然在上升或走平)
+    2. 短期股价回调，最低价触碰或跌破 BBI，但收盘最好还在 BBI 附近
+    3. 配合 KDJ J 值处于低位 (超卖回踩)
+    """
+    def __init__(
+        self,
+        bbi_min_window: int = 20,
+        max_window: int = 60,
+        tolerance: float = 0.015,
+        j_threshold: float = 20.0,
+        must_close_above: bool = True, # 是否严格要求收盘价在 BBI 之上
+        bbi_q_threshold: float = 0.1,  # BBI 趋势允许的回撤比例 (越小越严格)
+    ) -> None:
+        self.bbi_min_window = bbi_min_window
+        self.max_window = max_window
+        self.tolerance = tolerance
+        self.j_threshold = j_threshold
+        self.must_close_above = must_close_above
+        self.bbi_q_threshold = bbi_q_threshold
+
+    def _passes_filters(self, hist: pd.DataFrame) -> bool:
+        if len(hist) < self.max_window:
+            return False
+            
+        hist = hist.copy()
+        hist["BBI"] = compute_bbi(hist)
+        hist = compute_kdj(hist)
+
+        # 1. 检查 BBI 趋势 (大趋势不能坏)
+        if not bbi_deriv_uptrend(
+            hist["BBI"],
+            min_window=self.bbi_min_window,
+            max_window=self.max_window,
+            q_threshold=self.bbi_q_threshold,
+        ):
+            return False
+
+        # 2. 检查回踩
+        current = hist.iloc[-1]
+        bbi_val = current["BBI"]
+        low_val = current["low"]
+        close_val = current["close"]
+
+        # 条件A: 最低价 触达 BBI 下方或附近 (确实回调到位)
+        if low_val > bbi_val * (1 + self.tolerance):
+            return False 
+
+        # 条件B: 支撑确认
+        if self.must_close_above:
+            # 严格模式：收盘价必须在 BBI 之上 (金针探底)
+            if close_val <= bbi_val:
+                return False
+        else:
+            # 宽松模式：允许收盘价微破
+            if close_val < bbi_val * (1 - self.tolerance * 2):
+                return False
+
+        # 3. J 值低位确认 (回调到位)
+        if current["J"] > self.j_threshold:
+            return False
+
+        return True
+
+    def select(
+        self, date: pd.Timestamp, data: Dict[str, pd.DataFrame]
+    ) -> List[str]:
+        picks: List[str] = []
+        for code, df in data.items():
+            hist = df[df["date"] <= date]
+            if hist.empty:
+                continue
+            hist = hist.tail(self.max_window + 20)
             if self._passes_filters(hist):
                 picks.append(code)
         return picks

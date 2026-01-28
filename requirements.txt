@@ -1,4 +1,5 @@
-akshare==1.17.7
+akshare==1.17.8
+efinance==0.5.5.2
 mootdx==0.11.7
 pandas==2.3.0
 tqdm==4.66.4

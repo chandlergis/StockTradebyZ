@@ -5,11 +5,11 @@
       "alias": "少妇战法",
       "activate": true,
       "params": {
-        "j_threshold": 10,
+        "j_threshold": 1,
         "bbi_min_window": 20,
         "max_window": 60,
-        "price_range_pct": 1,
-        "bbi_q_threshold": 0.3,
+        "price_range_pct": 0.5,
+        "bbi_q_threshold": 0.2,
         "j_q_threshold": 0.10
       }
     },
@@ -70,6 +70,31 @@
         "fluc_threshold": 0.03,
         "j_q_threshold": 0.10,
         "gap_threshold": 0.2
+      }
+    },
+    {
+      "class": "KDJDivergenceSelector",
+      "alias": "底背离战法",
+      "activate": true,
+      "params": {
+        "lookback": 20,
+        "j_max_limit": 20.0,
+        "compare_interval": 3,
+        "prev_j_limit": 10.0,
+        "min_j_diff": 5.0
+      }
+    },
+    {
+      "class": "BBIPullbackSelector",
+      "alias": "回踩战法",
+      "activate": true,
+      "params": {
+        "bbi_min_window": 20,
+        "max_window": 60,
+        "tolerance": 0.01,
+        "j_threshold": 20.0,
+        "must_close_above": true,
+        "bbi_q_threshold": 0.1
       }
     }
   ]
